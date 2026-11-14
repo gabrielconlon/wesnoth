@@ -1,13 +1,8 @@
 # Building with Xcode
 This README describes the way to create the wesnoth release packages for macOS.
 
-## iOS status
-The default Xcode dependency workflow in this directory remains macOS-oriented.
-
-For the iOS simulator dependency bootstrap and audit workflow, use:
-
-- `projectfiles/Xcode/ios/build_ios_deps.sh`
-- `projectfiles/Xcode/ios/audit_ios_linkage.sh`
+## iOS
+See [ios/README.md](ios/README.md) for building the iOS app and uploading it to TestFlight.
 
 ### Requirements for building Wesnoth
  * Xcode 8.2.1 or higher...

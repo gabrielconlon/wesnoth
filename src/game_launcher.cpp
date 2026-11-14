@@ -53,7 +53,9 @@
 #include <TargetConditionals.h>
 #endif
 
-#if BOOST_VERSION >= 108600
+// iOS apps can't spawn processes, so boost::process isn't part of the iOS dependencies.
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+#elif BOOST_VERSION >= 108600
 
 // boost::asio (via boost::process) complains about winsock.h otherwise
 #ifdef _WIN32

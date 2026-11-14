@@ -1,0 +1,182 @@
+name: iOS
+
+# Builds the iOS app from the Xcode project.
+#
+# By default this only checks that the app compiles and links for a device
+# (no code signing). A signed archive is uploaded to TestFlight when either
+#   - the workflow is started manually with "testflight" ticked, or
+#   - the head commit message contains "[testflight]"
+# and the App Store Connect settings described in
+# projectfiles/Xcode/ios/README.md are configured for the repository.
+
+on:
+  push:
+    branches: [ 'claude/**', 'ios/**' ]
+  workflow_dispatch:
+    inputs:
+      testflight:
+        description: Upload a signed build to TestFlight
+        type: boolean
+        default: false
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios:
+    runs-on: macos-26
+    timeout-minutes: 300
+    env:
+      TESTFLIGHT: ${{ (inputs.testflight || contains(github.event.head_commit.message, '[testflight]')) && 'true' || 'false' }}
+      APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+      IOS_BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      IOS_BUILD_SIMULATOR_DEPS: 0
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg-binary-cache
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: "recursive"
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Restore dependency cache
+        uses: actions/cache/restore@v4
+        with:
+          path: vcpkg-binary-cache
+          key: ios-vcpkg-${{ hashFiles('projectfiles/Xcode/ios/vcpkg/**') }}-${{ github.run_id }}
+          restore-keys: |
+            ios-vcpkg-${{ hashFiles('projectfiles/Xcode/ios/vcpkg/**') }}-
+            ios-vcpkg-
+
+      - name: Build dependencies
+        run: |
+          mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install autoconf autoconf-archive automake libtool
+          ./projectfiles/Xcode/ios/build_ios_deps.sh
+          ls projectfiles/Xcode/temp/iOSCompileStuff-v0.0.1/arm64-ios-wesnoth/lib
+
+      - name: Show failed dependency logs
+        if: failure()
+        run: |
+          cd projectfiles/Xcode/temp/vcpkg-ios/buildtrees 2>/dev/null || exit 0
+          for f in $(ls -t */*.log | head -n 6); do
+            echo "::group::$f"
+            tail -n 150 "$f"
+            echo "::endgroup::"
+          done
+
+      # Saved even when a later step fails so finished packages aren't rebuilt.
+      - name: Save dependency cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: vcpkg-binary-cache
+          key: ios-vcpkg-${{ hashFiles('projectfiles/Xcode/ios/vcpkg/**') }}-${{ github.run_id }}
+
+      - name: Build (unsigned)
+        if: env.TESTFLIGHT != 'true'
+        working-directory: projectfiles/Xcode
+        run: |
+          set -o pipefail
+          status=0
+          xcodebuild build \
+            -project "The Battle for Wesnoth.xcodeproj" \
+            -scheme "The Battle for Wesnoth" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build-ios \
+            -IDEBuildingContinueBuildingAfterErrors=YES \
+            CODE_SIGNING_ALLOWED=NO \
+            > xcodebuild.log 2>&1 || status=$?
+          echo "xcodebuild exit status: $status"
+          grep -E "error:|Undefined symbols|ld: |referenced from|not found|BUILD (SUCCEEDED|FAILED)" xcodebuild.log | sort | uniq -c | sort -rn | head -n 200 || true
+          echo "::group::Log tail"
+          tail -n 120 xcodebuild.log
+          echo "::endgroup::"
+          if [ "$status" = 0 ]; then
+            du -sh "build-ios/Build/Products/Release-iphoneos/The Battle for Wesnoth.app"
+          fi
+          exit $status
+
+      - name: Archive and upload to TestFlight
+        if: env.TESTFLIGHT == 'true'
+        working-directory: projectfiles/Xcode
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          set -o pipefail
+          for name in APPLE_TEAM_ID IOS_BUNDLE_ID ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is not configured, see projectfiles/Xcode/ios/README.md"
+              exit 1
+            fi
+          done
+
+          key_path="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
+          printf '%s\n' "$ASC_KEY_P8" > "$key_path"
+          auth=(-allowProvisioningUpdates
+            -authenticationKeyPath "$key_path"
+            -authenticationKeyID "$ASC_KEY_ID"
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+
+          # Every TestFlight upload needs a build number it hasn't seen before.
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $GITHUB_RUN_NUMBER" Info-iOS.plist
+
+          status=0
+          xcodebuild archive \
+            -project "The Battle for Wesnoth.xcodeproj" \
+            -scheme "The Battle for Wesnoth" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build-ios \
+            -archivePath build-ios/Wesnoth.xcarchive \
+            "${auth[@]}" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            PRODUCT_BUNDLE_IDENTIFIER="$IOS_BUNDLE_ID" \
+            > xcodebuild.log 2>&1 || status=$?
+          grep -E "error:|Undefined symbols|ld: |ARCHIVE (SUCCEEDED|FAILED)" xcodebuild.log | sort | uniq -c | sort -rn | head -n 100 || true
+          tail -n 60 xcodebuild.log
+          [ "$status" = 0 ] || exit $status
+
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>destination</key>
+            <string>upload</string>
+            <key>teamID</key>
+            <string>${APPLE_TEAM_ID}</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>manageAppVersionAndBuildNumber</key>
+            <false/>
+            <key>testFlightInternalTestingOnly</key>
+            <false/>
+          </dict>
+          </plist>
+          EOF
+
+          xcodebuild -exportArchive \
+            -archivePath build-ios/Wesnoth.xcarchive \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath build-ios/export \
+            "${auth[@]}"
+          rm -f "$key_path"
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-xcodebuild-log
+          path: projectfiles/Xcode/xcodebuild.log
+          if-no-files-found: ignore
