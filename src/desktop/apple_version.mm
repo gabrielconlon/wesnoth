@@ -20,8 +20,9 @@
 #import "game_version.hpp"
 
 #import <Foundation/Foundation.h>
+#include <TargetConditionals.h>
 
-#if defined(SDL_PLATFORM_IOS)
+#if TARGET_OS_IPHONE
 #import <UIKit/UIKit.h>
 #endif
 
@@ -34,7 +35,7 @@ namespace apple {
 		//
 
 		std::string version_string;
-#if defined(SDL_PLATFORM_IOS)
+#if TARGET_OS_IPHONE
 		version_string = "Apple iOS ";
 #else
 		if (@available(macOS 10.12, *)) {
