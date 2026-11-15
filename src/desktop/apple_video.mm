@@ -155,7 +155,7 @@ static __weak UIResponder* first_responder = nil;
 - (void)on_dismiss_keyboard:(id)sender
 {
 	(void)sender;
-	SDL_StopTextInput();
+	SDL_StopTextInput(SDL_GetKeyboardFocus());
 }
 
 @end

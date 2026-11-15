@@ -5,7 +5,10 @@ set(VCPKG_CMAKE_SYSTEM_NAME iOS)
 set(VCPKG_OSX_SYSROOT iphoneos)
 
 # Force autotools ports to treat iOS device as cross-compilation.
-set(VCPKG_MAKE_BUILD_TRIPLET "--build=aarch64-apple-darwin" "--host=aarch64-apple-ios")
+# A single option: a list here is joined with ";" by the older vcpkg_configure_make
+# (openssl), which ends the shell command and drops every option after it.
+# --build is left to config.guess so this works on Intel and Apple Silicon hosts.
+set(VCPKG_MAKE_BUILD_TRIPLET "--host=aarch64-apple-ios")
 
 # The Xcode project only links the release archives.
 set(VCPKG_BUILD_TYPE release)
