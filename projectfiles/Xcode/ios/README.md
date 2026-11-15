@@ -15,22 +15,13 @@ Requirements: a Mac with Xcode, plus `brew install autoconf autoconf-archive aut
 3. For a device, set your own team and bundle identifier under
    Signing & Capabilities.
 
-## CI and TestFlight
+## TestFlight
 
-`.github/workflows/ios.yml` builds the app on a macOS runner. Without further
-setup it only verifies that the app compiles and links.
+`projectfiles/Xcode/ios/release.sh` archives the app for a device, exports a
+signed `.ipa` and uploads it to TestFlight, signing through the App Store
+Connect API key in `~/.appstoreconnect/private_keys`. Build the device
+dependencies first (`IOS_BUILD_SIMULATOR_DEPS=0` is enough). Pass
+`--no-upload` to stop after the export.
 
-To have it upload to TestFlight:
-
-1. Join the Apple Developer Program and note your Team ID.
-2. Register a bundle identifier of your own (`org.wesnoth.Wesnoth` belongs to
-   the Wesnoth project) and create an app with it in App Store Connect.
-3. In App Store Connect → Users and Access → Integrations, create an
-   App Store Connect API key with the Admin role and download the `.p8` file.
-4. In the GitHub repository settings → Secrets and variables → Actions, add
-   - variables `APPLE_TEAM_ID` and `IOS_BUNDLE_ID`
-   - secrets `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_KEY_P8` (the contents of the `.p8` file)
-5. Run the "iOS" workflow manually with "testflight" ticked, or push a commit
-   whose message contains `[testflight]`.
-
-The build number (`CFBundleVersion`) is set to the workflow run number.
+The build number (`CFBundleVersion`) is the git commit count, so every
+release needs a new commit.

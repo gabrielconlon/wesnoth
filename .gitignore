@@ -40,6 +40,7 @@ projectfiles/Xcode/**/build
 projectfiles/Xcode/**/DerivedData
 projectfiles/Xcode/**/Headers
 projectfiles/Xcode/**/temp
+projectfiles/Xcode/build-ios
 projectfiles/Xcode/**/Index
 projectfiles/Xcode/**/Wesnoth.dmgCanvas
 projectfiles/Xcode/**/*.mode1v3
