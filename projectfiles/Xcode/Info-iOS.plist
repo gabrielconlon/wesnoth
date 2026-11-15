@@ -26,6 +26,10 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Wesnoth uses Bluetooth only to connect game controllers.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Wesnoth does not use the camera.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>(C) 2003-2026 by The Battle for Wesnoth Project</string>
 	<key>UILaunchStoryboardName</key>
